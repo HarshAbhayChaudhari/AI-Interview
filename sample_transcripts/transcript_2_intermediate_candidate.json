@@ -1,0 +1,129 @@
+{
+  "candidate_name": "Michael Chen",
+  "interview_date": "2024-01-15",
+  "session_id": "session_002",
+  "overall_score": 3.2,
+  "recommendation": "Needs Improvement",
+  "summary": "Michael shows basic to intermediate Excel skills with some knowledge of common functions, but lacks depth in advanced features and best practices. With additional training, he could become proficient.",
+  "questions_and_answers": [
+    {
+      "question_id": 1,
+      "question": "How would you use a VLOOKUP in Excel? Please provide a practical example with sample data.",
+      "answer": "VLOOKUP helps you find data in a table. You use it like =VLOOKUP(lookup_value, table_array, col_index_num, range_lookup). For example, if I have employee names in column A and their salaries in column B, I can use =VLOOKUP(\"John\", A:B, 2, FALSE) to find John's salary. The FALSE means exact match.",
+      "evaluation": {
+        "technical_accuracy": 4,
+        "practical_application": 3,
+        "clarity": 4,
+        "completeness": 3,
+        "overall_score": 3.5,
+        "feedback": "Good basic understanding with correct syntax and example. Could benefit from more practical context and awareness of limitations.",
+        "strengths": ["Correct syntax", "Basic example provided", "Mentions exact match"],
+        "improvements": ["More practical context", "Mention VLOOKUP limitations", "Explain when to use TRUE vs FALSE"]
+      }
+    },
+    {
+      "question_id": 2,
+      "question": "Explain the difference between Absolute and Relative cell references. When would you use each?",
+      "answer": "Relative references change when you copy formulas, like A1. Absolute references don't change, like $A$1. You use absolute references when you want to always reference the same cell, like a tax rate. Relative references are used when you want the formula to adjust for each row or column.",
+      "evaluation": {
+        "technical_accuracy": 4,
+        "practical_application": 3,
+        "clarity": 3,
+        "completeness": 3,
+        "overall_score": 3.3,
+        "feedback": "Basic understanding is correct but lacks depth and practical examples. Could benefit from more detailed explanation.",
+        "strengths": ["Correct basic concept", "Mentions when to use each"],
+        "improvements": ["More detailed examples", "Explain mixed references", "Provide specific use cases"]
+      }
+    },
+    {
+      "question_id": 3,
+      "question": "What is a Pivot Table and when would you use it? Walk me through creating one.",
+      "answer": "A pivot table summarizes data. You use it to analyze large amounts of data quickly. To create one, you select your data, go to Insert, click PivotTable, choose where to put it, then drag fields to different areas. You can put categories in rows and values in the values area to see totals.",
+      "evaluation": {
+        "technical_accuracy": 3,
+        "practical_application": 3,
+        "clarity": 3,
+        "completeness": 2,
+        "overall_score": 2.8,
+        "feedback": "Basic understanding but lacks detail and practical examples. The explanation is too general and doesn't show deep understanding.",
+        "strengths": ["Knows basic purpose", "Mentions basic steps"],
+        "improvements": ["More detailed steps", "Practical examples", "Explain different areas", "Mention advanced features"]
+      }
+    },
+    {
+      "question_id": 4,
+      "question": "How do you handle duplicate values in Excel? What are the different methods available?",
+      "answer": "You can find duplicates using conditional formatting. Go to Home, Conditional Formatting, Highlight Cells Rules, Duplicate Values. You can also use the Remove Duplicates feature in the Data tab. I think there might be other ways but I'm not sure about the formulas.",
+      "evaluation": {
+        "technical_accuracy": 3,
+        "practical_application": 3,
+        "clarity": 3,
+        "completeness": 2,
+        "overall_score": 2.8,
+        "feedback": "Knows basic methods but lacks comprehensive understanding. Missing formula-based approaches and advanced techniques.",
+        "strengths": ["Knows conditional formatting", "Mentions Remove Duplicates"],
+        "improvements": ["Learn COUNTIF approach", "Understand Advanced Filter", "More comprehensive methods"]
+      }
+    },
+    {
+      "question_id": 5,
+      "question": "Write a formula to calculate the average of cells A1 through A10, excluding blank cells and zeros.",
+      "answer": "I think you can use =AVERAGE(A1:A10) but that won't exclude zeros. Maybe =SUM(A1:A10)/COUNT(A1:A10) but that still includes zeros. I'm not sure about excluding both blanks and zeros. I might need to use a more complex formula or filter the data first.",
+      "evaluation": {
+        "technical_accuracy": 2,
+        "practical_application": 2,
+        "clarity": 3,
+        "completeness": 2,
+        "overall_score": 2.3,
+        "feedback": "Shows some understanding but lacks knowledge of appropriate functions. Needs to learn AVERAGEIF and related functions.",
+        "strengths": ["Attempts to solve", "Recognizes limitations"],
+        "improvements": ["Learn AVERAGEIF function", "Understand conditional averaging", "Practice with different scenarios"]
+      }
+    },
+    {
+      "question_id": 6,
+      "question": "How would you create a dynamic chart that updates automatically when new data is added?",
+      "answer": "I'm not sure about this. Maybe you can use a table and the chart will update? Or you might need to manually update the chart range when you add new data. I haven't worked much with dynamic charts before.",
+      "evaluation": {
+        "technical_accuracy": 2,
+        "practical_application": 2,
+        "clarity": 3,
+        "completeness": 1,
+        "overall_score": 2.0,
+        "feedback": "Limited knowledge of dynamic charts. Needs significant improvement in this area.",
+        "strengths": ["Honest about limitations"],
+        "improvements": ["Learn about Excel Tables", "Understand named ranges", "Practice with dynamic ranges", "Study OFFSET function"]
+      }
+    },
+    {
+      "question_id": 7,
+      "question": "Explain the difference between COUNT, COUNTA, COUNTIF, and COUNTIFS functions with examples.",
+      "answer": "COUNT counts numbers, COUNTA counts all cells that aren't empty, COUNTIF counts cells that meet a condition, and COUNTIFS counts cells that meet multiple conditions. For examples: =COUNT(A1:A10) counts numbers, =COUNTA(A1:A10) counts non-empty cells, =COUNTIF(A1:A10,\">5\") counts cells greater than 5. I'm not sure about COUNTIFS syntax.",
+      "evaluation": {
+        "technical_accuracy": 4,
+        "practical_application": 3,
+        "clarity": 4,
+        "completeness": 3,
+        "overall_score": 3.5,
+        "feedback": "Good understanding of basic counting functions but lacks knowledge of COUNTIFS. Examples are helpful but could be more comprehensive.",
+        "strengths": ["Correct basic concepts", "Good examples for first three functions"],
+        "improvements": ["Learn COUNTIFS syntax", "Practice with multiple criteria", "More complex examples"]
+      }
+    }
+  ],
+  "strengths": [
+    "Basic understanding of common Excel functions",
+    "Willing to attempt complex problems",
+    "Honest about knowledge limitations",
+    "Some practical examples provided"
+  ],
+  "weaknesses": [
+    "Limited knowledge of advanced Excel features",
+    "Insufficient understanding of dynamic ranges and charts",
+    "Lacks depth in formula construction",
+    "Needs improvement in conditional functions",
+    "Limited experience with data analysis tools"
+  ]
+}
+

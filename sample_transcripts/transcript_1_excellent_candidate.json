@@ -1,0 +1,127 @@
+{
+  "candidate_name": "Sarah Johnson",
+  "interview_date": "2024-01-15",
+  "session_id": "session_001",
+  "overall_score": 4.6,
+  "recommendation": "Hire",
+  "summary": "Sarah demonstrated exceptional Excel proficiency with deep understanding of advanced functions, data analysis techniques, and best practices. Her responses showed both technical accuracy and practical application skills.",
+  "questions_and_answers": [
+    {
+      "question_id": 1,
+      "question": "How would you use a VLOOKUP in Excel? Please provide a practical example with sample data.",
+      "answer": "VLOOKUP is used to find a value in the first column of a table and return a value from the same row in another column. For example, if I have a table with employee IDs in column A and names in column B, I can use =VLOOKUP(123, A:B, 2, FALSE) to find the name for employee ID 123. The FALSE parameter ensures exact match. I'd also mention that VLOOKUP can only look to the right, so if I need to look left, I'd use INDEX/MATCH instead.",
+      "evaluation": {
+        "technical_accuracy": 5,
+        "practical_application": 5,
+        "clarity": 5,
+        "completeness": 5,
+        "overall_score": 5.0,
+        "feedback": "Excellent explanation with practical example and awareness of limitations. Shows deep understanding of the function.",
+        "strengths": ["Clear example", "Mentions exact match parameter", "Aware of VLOOKUP limitations"],
+        "improvements": []
+      }
+    },
+    {
+      "question_id": 2,
+      "question": "Explain the difference between Absolute and Relative cell references. When would you use each?",
+      "answer": "Relative references change when copied (like A1), absolute references stay fixed (like $A$1), and mixed references fix either row or column (like $A1 or A$1). I use relative references for formulas that should adjust when copied, like calculating totals down a column. Absolute references are perfect for referencing a constant value like a tax rate or conversion factor that's in a fixed cell. Mixed references are great for creating multiplication tables or when you want to reference a specific row or column that shouldn't change.",
+      "evaluation": {
+        "technical_accuracy": 5,
+        "practical_application": 5,
+        "clarity": 5,
+        "completeness": 5,
+        "overall_score": 5.0,
+        "feedback": "Perfect explanation with clear examples of when to use each type. Shows practical understanding.",
+        "strengths": ["Covers all reference types", "Practical examples", "Clear use cases"],
+        "improvements": []
+      }
+    },
+    {
+      "question_id": 3,
+      "question": "What is a Pivot Table and when would you use it? Walk me through creating one.",
+      "answer": "A pivot table is a powerful data summarization tool that lets you analyze large datasets by grouping and aggregating data. I'd use it to analyze sales data by region, summarize survey responses, or find trends in financial data. To create one: 1) Select your data range, 2) Go to Insert > PivotTable, 3) Choose where to place it, 4) Drag fields to Rows, Columns, Values, and Filters areas. For example, I might put 'Region' in Rows, 'Product' in Columns, and 'Sales' in Values to see sales by region and product. I can also add filters for specific time periods.",
+      "evaluation": {
+        "technical_accuracy": 5,
+        "practical_application": 5,
+        "clarity": 4,
+        "completeness": 5,
+        "overall_score": 4.8,
+        "feedback": "Excellent step-by-step explanation with practical examples. Shows strong understanding of pivot table capabilities.",
+        "strengths": ["Clear process", "Practical examples", "Mentions filters"],
+        "improvements": ["Could mention calculated fields"]
+      }
+    },
+    {
+      "question_id": 4,
+      "question": "How do you handle duplicate values in Excel? What are the different methods available?",
+      "answer": "There are several ways to handle duplicates: 1) Conditional formatting to highlight duplicates using Home > Conditional Formatting > Highlight Cells Rules > Duplicate Values, 2) Remove duplicates using Data > Remove Duplicates, 3) Use COUNTIF formula to identify duplicates like =COUNTIF(A:A,A1)>1, 4) Advanced Filter to show unique values only. I'd use conditional formatting first to identify the duplicates, then decide whether to remove them or keep them based on the business requirement. For data cleaning, I'd use Remove Duplicates, but I'd always make a backup first.",
+      "evaluation": {
+        "technical_accuracy": 5,
+        "practical_application": 5,
+        "clarity": 4,
+        "completeness": 5,
+        "overall_score": 4.8,
+        "feedback": "Comprehensive answer covering multiple methods with practical workflow considerations.",
+        "strengths": ["Multiple methods covered", "Practical workflow", "Backup consideration"],
+        "improvements": ["Could mention UNIQUE function in newer Excel versions"]
+      }
+    },
+    {
+      "question_id": 5,
+      "question": "Write a formula to calculate the average of cells A1 through A10, excluding blank cells and zeros.",
+      "answer": "I can use =AVERAGEIF(A1:A10,\"<>0\",A1:A10) to exclude zeros, but this won't exclude blanks. For both blanks and zeros, I'd use =AVERAGEIFS(A1:A10,A1:A10,\"<>0\",A1:A10,\"<>\"&\"\") or the simpler =SUM(A1:A10)/COUNTIF(A1:A10,\">0\"). Actually, the cleanest approach is =AVERAGEIF(A1:A10,\">0\") which automatically excludes both blanks and zeros since blanks are treated as zero in comparisons.",
+      "evaluation": {
+        "technical_accuracy": 5,
+        "practical_application": 4,
+        "clarity": 4,
+        "completeness": 5,
+        "overall_score": 4.5,
+        "feedback": "Good understanding of different approaches, though the explanation could be clearer about why AVERAGEIF works for both cases.",
+        "strengths": ["Multiple approaches", "Correct formulas", "Understanding of function behavior"],
+        "improvements": ["Could explain why AVERAGEIF excludes blanks"]
+      }
+    },
+    {
+      "question_id": 6,
+      "question": "How would you create a dynamic chart that updates automatically when new data is added?",
+      "answer": "I'd use Excel Tables and named ranges. First, convert the data to a table (Ctrl+T), then create a chart using the table data. Excel tables automatically expand, so the chart will include new data. Alternatively, I can use dynamic named ranges with OFFSET function like =OFFSET(Sheet1!$A$1,0,0,COUNTA(Sheet1!$A:$A),1) and reference this named range in the chart. For more control, I might use INDEX with COUNTA to create a dynamic range. The table approach is usually the easiest and most reliable method.",
+      "evaluation": {
+        "technical_accuracy": 5,
+        "practical_application": 5,
+        "clarity": 4,
+        "completeness": 4,
+        "overall_score": 4.5,
+        "feedback": "Excellent answer covering multiple approaches with practical recommendations.",
+        "strengths": ["Multiple methods", "Practical recommendation", "Correct formulas"],
+        "improvements": ["Could mention chart refresh considerations"]
+      }
+    },
+    {
+      "question_id": 7,
+      "question": "Explain the difference between COUNT, COUNTA, COUNTIF, and COUNTIFS functions with examples.",
+      "answer": "COUNT counts only numeric values, COUNTA counts all non-empty cells (text, numbers, formulas), COUNTIF counts cells meeting a single condition, and COUNTIFS counts cells meeting multiple conditions. Examples: =COUNT(A1:A10) counts numbers only, =COUNTA(A1:A10) counts all non-blank cells, =COUNTIF(A1:A10,\">50\") counts values greater than 50, =COUNTIFS(A1:A10,\">50\",B1:B10,\"Active\") counts rows where A>50 AND B=\"Active\". COUNTIFS is very powerful for complex criteria and can replace multiple COUNTIF functions.",
+      "evaluation": {
+        "technical_accuracy": 5,
+        "practical_application": 5,
+        "clarity": 5,
+        "completeness": 5,
+        "overall_score": 5.0,
+        "feedback": "Perfect explanation with clear examples and understanding of when to use each function.",
+        "strengths": ["Clear distinctions", "Practical examples", "Advanced understanding"],
+        "improvements": []
+      }
+    }
+  ],
+  "strengths": [
+    "Exceptional technical accuracy across all Excel functions",
+    "Strong practical application skills with real-world examples",
+    "Deep understanding of advanced Excel features and limitations",
+    "Clear communication and explanation abilities",
+    "Awareness of best practices and data integrity considerations"
+  ],
+  "weaknesses": [
+    "Could provide more detailed explanations in some areas",
+    "Might benefit from mentioning newer Excel functions in some contexts"
+  ]
+}
+
