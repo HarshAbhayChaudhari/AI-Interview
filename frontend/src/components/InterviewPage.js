@@ -7,7 +7,9 @@ const InterviewPage = ({ interviewData, setInterviewData }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [isPlayingIntro, setIsPlayingIntro] = useState(true);
+  const [introPlayBlocked, setIntroPlayBlocked] = useState(false);
   const [isPlayingQuestion, setIsPlayingQuestion] = useState(false);
+  const [questionPlayBlocked, setQuestionPlayBlocked] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [audioChunks, setAudioChunks] = useState([]);
   const [progress, setProgress] = useState({ current: 0, total: 5 });
@@ -26,6 +28,13 @@ const InterviewPage = ({ interviewData, setInterviewData }) => {
     playIntroduction();
   }, [interviewData, navigate]);
 
+  // After intro ends and question is mounted, play question when audio element is present
+  useEffect(() => {
+    if (!isPlayingIntro && currentQuestion) {
+      playQuestionAudio(currentQuestion);
+    }
+  }, [isPlayingIntro, currentQuestion]);
+
   const playIntroduction = async () => {
     try {
       const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -33,8 +42,14 @@ const InterviewPage = ({ interviewData, setInterviewData }) => {
       
       if (audioRef.current) {
         audioRef.current.src = audioUrl;
-        await audioRef.current.play();
-        setIsPlayingIntro(true);
+        try {
+          await audioRef.current.play();
+          setIsPlayingIntro(true);
+          setIntroPlayBlocked(false);
+        } catch (err) {
+          // Autoplay blocked by browser; require user gesture
+          setIntroPlayBlocked(true);
+        }
       }
     } catch (error) {
       console.error('Error playing introduction:', error);
@@ -48,8 +63,7 @@ const InterviewPage = ({ interviewData, setInterviewData }) => {
     // Load first question
     setCurrentQuestion(interviewData.firstQuestion);
     setProgress({ current: 1, total: interviewData.totalQuestions });
-    // Auto-play first question
-    playQuestionAudio(interviewData.firstQuestion);
+    // Audio element will remount; playback will be triggered by useEffect
   };
 
   const playQuestionAudio = async (question) => {
@@ -60,7 +74,12 @@ const InterviewPage = ({ interviewData, setInterviewData }) => {
       if (audioRef.current) {
         setIsPlayingQuestion(true);
         audioRef.current.src = audioUrl;
-        await audioRef.current.play();
+        try {
+          await audioRef.current.play();
+          setQuestionPlayBlocked(false);
+        } catch (err) {
+          setQuestionPlayBlocked(true);
+        }
       }
     } catch (error) {
       console.error('Error playing question:', error);
@@ -218,7 +237,28 @@ const InterviewPage = ({ interviewData, setInterviewData }) => {
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
             <span className="text-sm font-medium">Playing audio...</span>
           </div>
+          {introPlayBlocked && (
+            <div className="mt-4">
+              <button
+                onClick={() => {
+                  if (audioRef.current) {
+                    audioRef.current.play().then(() => setIntroPlayBlocked(false)).catch(() => {});
+                  }
+                }}
+                className="btn-primary"
+              >
+                Tap to Play Introduction
+              </button>
+            </div>
+          )}
         </div>
+        {/* Hidden audio player (ensure present during intro) */}
+        <audio
+          ref={audioRef}
+          onEnded={handleIntroductionEnd}
+          onCanPlay={() => setIntroPlayBlocked(false)}
+          style={{ display: 'none' }}
+        />
       </div>
     );
   }
@@ -265,6 +305,20 @@ const InterviewPage = ({ interviewData, setInterviewData }) => {
                 <div className="mt-3 flex items-center space-x-2 text-primary-600">
                   <Volume2 className="h-4 w-4 animate-pulse" />
                   <span className="text-sm">Playing question audio...</span>
+                </div>
+              )}
+              {questionPlayBlocked && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => {
+                      if (audioRef.current) {
+                        audioRef.current.play().then(() => setQuestionPlayBlocked(false)).catch(() => {});
+                      }
+                    }}
+                    className="btn-primary"
+                  >
+                    Tap to Play Question
+                  </button>
                 </div>
               )}
             </div>
@@ -358,6 +412,7 @@ const InterviewPage = ({ interviewData, setInterviewData }) => {
       <audio
         ref={audioRef}
         onEnded={isPlayingIntro ? handleIntroductionEnd : handleQuestionAudioEnd}
+        onError={() => { setQuestionPlayBlocked(true); setIsPlayingQuestion(false); }}
         style={{ display: 'none' }}
       />
     </div>

@@ -9,12 +9,14 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
+import base64
 
-# OpenAI imports
-from openai import OpenAI
+# HTTP client
+import httpx
 
 # Firestore
 from google.cloud import firestore
+from google.cloud import texttospeech
 from google.oauth2 import service_account
 
 # -------------------------
@@ -36,9 +38,38 @@ app.add_middleware(
 )
 
 # -------------------------
-# Initialize OpenAI
+# Gemini REST configuration
 # -------------------------
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_TEXT_MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.0-flash")
+GEMINI_AUDIO_MODEL = os.getenv("GEMINI_AUDIO_MODEL", "gemini-2.0-flash")
+GEMINI_TTS_MODEL = os.getenv("GEMINI_TTS_MODEL", "gemini-2.5-flash-tts")
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+
+def gemini_generate_content(parts: list, model: str, generation_config: Optional[dict] = None) -> dict:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is not set")
+    url = GEMINI_ENDPOINT.format(model=model, key=GEMINI_API_KEY)
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": parts
+            }
+        ]
+    }
+    if generation_config:
+        payload["generationConfig"] = generation_config
+    try:
+        with httpx.Client(timeout=60) as client:
+            resp = client.post(url, json=payload)
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPStatusError as e:
+        detail = e.response.text
+        raise HTTPException(status_code=e.response.status_code, detail=f"Gemini API error: {detail}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gemini request failed: {str(e)}")
 
 # -------------------------
 # Initialize Firestore
@@ -179,27 +210,62 @@ def update_session(session_id: str, updates: Dict):
 # Helper Functions
 # -------------------------
 def transcribe_audio(file_path: str) -> str:
-    """Convert speech to text using Whisper API"""
+    """Convert speech to text using Gemini 2.0 Flash multimodal via REST."""
     try:
-        with open(file_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language="en"
-            )
-        return transcript.text
+        with open(file_path, "rb") as f:
+            audio_bytes = f.read()
+        b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        parts = [
+            {"text": "Transcribe the spoken English audio to plain text. Return only the transcript."},
+            {"inline_data": {"mime_type": "audio/wav", "data": b64}}
+        ]
+        data = gemini_generate_content(parts, GEMINI_AUDIO_MODEL)
+        # Extract text
+        candidates = data.get("candidates", [])
+        if not candidates:
+            raise RuntimeError("No candidates in transcription response")
+        parts_out = candidates[0].get("content", {}).get("parts", [])
+        for p in parts_out:
+            if "text" in p:
+                return p["text"].strip()
+        raise RuntimeError("No text in transcription response parts")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Speech transcription failed: {str(e)}")
 
 def synthesize_speech(text: str, output_path: str):
-    """Convert text to speech using OpenAI TTS"""
+    """Convert text to speech using Google Cloud Text-to-Speech (Gemini-TTS), output MP3."""
     try:
-        response = client.audio.speech.create(
-            model="tts-1",
-            voice="alloy",
-            input=text
+        # Resolve credentials: prefer GOOGLE_APPLICATION_CREDENTIALS; fallback to bundled service account
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if not creds_path or not os.path.exists(creds_path):
+            # Try project root JSON
+            project_root = Path(__file__).parent.parent
+            default_path = project_root / "ai-interview-a68d2-firebase-adminsdk-fbsvc-eeb9bc2e79.json"
+            # Or backend-local JSON
+            backend_local = Path(__file__).parent / "ai-interview-a68d2-firebase-adminsdk-fbsvc-eeb9bc2e79.json"
+            if default_path.exists():
+                creds_path = str(default_path)
+            elif backend_local.exists():
+                creds_path = str(backend_local)
+            else:
+                raise HTTPException(status_code=500, detail="Google credentials not found. Set GOOGLE_APPLICATION_CREDENTIALS or place the service account JSON at project root or backend directory.")
+
+        credentials = service_account.Credentials.from_service_account_file(creds_path)
+        client = texttospeech.TextToSpeechClient(credentials=credentials)
+        synthesis_input = texttospeech.SynthesisInput(text=text)
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            model_name=os.getenv("GEMINI_TTS_MODEL", "gemini-2.5-flash-tts")
         )
-        response.stream_to_file(output_path)
+        print(f"TTS: model={voice.model_name}, voice={voice.name}")
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
+        response = client.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
+        with open(output_path, "wb") as f:
+            f.write(response.audio_content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Speech synthesis failed: {str(e)}")
 
@@ -453,18 +519,22 @@ Respond in this EXACT JSON format:
 """
     
     try:
-        # Call OpenAI
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are an expert Excel interviewer. Provide detailed, constructive evaluation."},
-                {"role": "user", "content": evaluation_prompt}
-            ],
-            temperature=0.3
-        )
-        
-        # Parse response
-        evaluation_json = json.loads(response.choices[0].message.content)
+        # Call Gemini 2.0 Flash via REST
+        parts = [{"text": evaluation_prompt}]
+        data = gemini_generate_content(parts, GEMINI_TEXT_MODEL, generation_config={"temperature": 0.3})
+        # Extract model text
+        candidates = data.get("candidates", [])
+        if not candidates:
+            raise RuntimeError("No candidates in evaluation response")
+        parts_out = candidates[0].get("content", {}).get("parts", [])
+        text_out = None
+        for p in parts_out:
+            if "text" in p:
+                text_out = p["text"]
+                break
+        if not text_out:
+            raise RuntimeError("No text found in evaluation response")
+        evaluation_json = json.loads(text_out)
         
         # Update session with evaluation
         session["evaluation"] = evaluation_json
