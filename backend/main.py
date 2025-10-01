@@ -99,6 +99,28 @@ db = init_firestore()
 # In-memory fallback store
 sessions_memory: Dict[str, Dict] = {}
 
+# Local disk persistence (dev fallback when Firestore unavailable)
+SESSIONS_DIR = Path(__file__).parent / "sessions"
+SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+def save_session_to_file(session_id: str, session_data: Dict):
+    try:
+        file_path = SESSIONS_DIR / f"{session_id}.json"
+        with open(file_path, "w") as f:
+            json.dump(session_data, f)
+    except Exception as _:
+        pass
+
+def load_session_from_file(session_id: str) -> Optional[Dict]:
+    try:
+        file_path = SESSIONS_DIR / f"{session_id}.json"
+        if file_path.exists():
+            with open(file_path, "r") as f:
+                return json.load(f)
+    except Exception as _:
+        pass
+    return None
+
 # -------------------------
 # Excel Interview Questions (First 5 Only)
 # -------------------------
@@ -194,11 +216,18 @@ def load_session_from_firestore(session_id: str) -> Optional[Dict]:
     return None
 
 def get_session(session_id: str) -> Optional[Dict]:
-    """Get session from Firestore or memory"""
+    """Get session from memory, then local file, then Firestore"""
+    if session_id in sessions_memory:
+        return sessions_memory[session_id]
+    session = load_session_from_file(session_id)
+    if session:
+        sessions_memory[session_id] = session
+        return session
     session = load_session_from_firestore(session_id)
     if session:
+        sessions_memory[session_id] = session
         return session
-    return sessions_memory.get(session_id)
+    return None
 
 def update_session(session_id: str, updates: Dict):
     """Update session in Firestore and memory"""
@@ -321,6 +350,7 @@ async def start_interview(request: StartInterviewRequest):
     
     # Save to both memory and Firestore
     sessions_memory[session_id] = session_data
+    save_session_to_file(session_id, session_data)
     save_session_to_firestore(session_id, session_data)
     
     # Generate introduction audio
@@ -427,6 +457,7 @@ async def submit_answer(
     
     # Save session
     sessions_memory[session_id] = session
+    save_session_to_file(session_id, session)
     save_session_to_firestore(session_id, session)
     
     # Prepare response
@@ -543,6 +574,7 @@ Respond in this EXACT JSON format:
         
         # Save session
         sessions_memory[request.session_id] = session
+        save_session_to_file(request.session_id, session)
         save_session_to_firestore(request.session_id, session)
         
         return EvaluationResponse(
