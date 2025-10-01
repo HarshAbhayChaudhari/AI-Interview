@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileSpreadsheet, Brain } from 'lucide-react';
+import { FileSpreadsheet, Mic } from 'lucide-react';
 
 const Header = () => {
   return (
@@ -9,14 +9,14 @@ const Header = () => {
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2">
               <FileSpreadsheet className="h-8 w-8 text-primary-600" />
-              <Brain className="h-6 w-6 text-primary-500" />
+              <Mic className="h-6 w-6 text-primary-500" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">
-                Excel Skills Interviewer
+                Excel Voice Interview
               </h1>
               <p className="text-sm text-gray-500">
-                AI-Powered Assessment Platform
+                AI-Powered Voice Assessment
               </p>
             </div>
           </div>

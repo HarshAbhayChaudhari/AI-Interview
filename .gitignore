@@ -108,3 +108,29 @@ service-account-key.json
 # Temporary files
 *.tmp
 *.temp
+
+# Secrets and credentials
+*.env
+backend/config.env
+frontend/config.env
+*.pem
+*.key
+*service*account*key*.json
+ai-*-firebase*.json
+backend/ai-*-firebase*.json
+
+# Virtual envs
+.venv/
+backend/.venv/
+
+# Binaries and archives
+*.tar.gz
+*.pkg
+node.tar.gz
+node-arm64.tar.gz
+node-installer.pkg
+
+# Logs
+*.log
+backend_server_*.log
+

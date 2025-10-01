@@ -1,24 +1,32 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 import uuid
 import json
 import os
-from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import HumanMessage, SystemMessage
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+# OpenAI imports
+from openai import OpenAI
+
+# Firestore
+from google.cloud import firestore
+from google.oauth2 import service_account
 
 # -------------------------
-# Initialize
+# Initialize FastAPI
 # -------------------------
 app = FastAPI(
-    title="Excel Mock Interviewer API",
-    description="AI-powered Excel skills assessment system",
-    version="1.0.0"
+    title="Excel Voice Interview API",
+    description="AI-powered Excel voice interview with batch evaluation",
+    version="3.0.0"
 )
 
-# CORS middleware for frontend integration
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, specify your frontend domain
@@ -27,17 +35,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize OpenAI LLM
-llm = ChatOpenAI(
-    model="gpt-4o-mini", 
-    temperature=0.3,
-    api_key=os.getenv("OPENAI_API_KEY")
-)
+# -------------------------
+# Initialize OpenAI
+# -------------------------
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# In-memory store for sessions (in production, use Firestore)
-sessions: Dict[str, Dict] = {}
+# -------------------------
+# Initialize Firestore
+# -------------------------
+def init_firestore():
+    """Initialize Firestore database"""
+    try:
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if not creds_path:
+            project_root = Path(__file__).parent.parent
+            creds_path = project_root / "ai-interview-a68d2-firebase-adminsdk-fbsvc-eeb9bc2e79.json"
+        
+        if os.path.exists(creds_path):
+            credentials = service_account.Credentials.from_service_account_file(creds_path)
+            db = firestore.Client(credentials=credentials, project=os.getenv("GCP_PROJECT_ID", "ai-interview-a68d2"))
+            print("✅ Firestore initialized successfully")
+            return db
+        else:
+            print("⚠️ No Firestore credentials found, using in-memory storage")
+            return None
+    except Exception as e:
+        print(f"⚠️ Firestore initialization failed: {e}, using in-memory storage")
+        return None
 
-# Comprehensive Excel interview questions
+db = init_firestore()
+
+# In-memory fallback store
+sessions_memory: Dict[str, Dict] = {}
+
+# -------------------------
+# Excel Interview Questions (First 5 Only)
+# -------------------------
 QUESTIONS = [
     {
         "id": 1,
@@ -68,18 +101,6 @@ QUESTIONS = [
         "question": "Write a formula to calculate the average of cells A1 through A10, excluding blank cells and zeros.",
         "category": "Formulas",
         "difficulty": "Intermediate"
-    },
-    {
-        "id": 6,
-        "question": "How would you create a dynamic chart that updates automatically when new data is added?",
-        "category": "Charts & Visualization",
-        "difficulty": "Advanced"
-    },
-    {
-        "id": 7,
-        "question": "Explain the difference between COUNT, COUNTA, COUNTIF, and COUNTIFS functions with examples.",
-        "category": "Statistical Functions",
-        "difficulty": "Intermediate"
     }
 ]
 
@@ -87,30 +108,27 @@ QUESTIONS = [
 # Data Models
 # -------------------------
 class StartInterviewRequest(BaseModel):
-    candidate_name: Optional[str] = "Anonymous"
+    candidate_name: str
 
 class StartInterviewResponse(BaseModel):
     session_id: str
-    welcome_message: str
-    first_question: str
+    introduction_audio_url: str
+    first_question: Dict
     total_questions: int
 
 class SubmitAnswerRequest(BaseModel):
     session_id: str
-    answer: str
+    question_id: int
 
 class SubmitAnswerResponse(BaseModel):
-    question_id: int
-    question: str
-    evaluation: Dict
-    next_question: Optional[str] = None
+    next_question: Optional[Dict] = None
     finished: bool = False
     progress: str
 
-class FinishInterviewRequest(BaseModel):
+class EvaluateRequest(BaseModel):
     session_id: str
 
-class FinishInterviewResponse(BaseModel):
+class EvaluationResponse(BaseModel):
     summary: str
     overall_score: float
     strengths: List[str]
@@ -119,277 +137,391 @@ class FinishInterviewResponse(BaseModel):
     detailed_feedback: List[Dict]
 
 # -------------------------
+# Session Management
+# -------------------------
+def save_session_to_firestore(session_id: str, session_data: Dict):
+    """Save session to Firestore"""
+    if db:
+        try:
+            doc_ref = db.collection('voice_interview_sessions').document(session_id)
+            # Convert any datetime objects to ISO format strings
+            firestore_data = json.loads(json.dumps(session_data, default=str))
+            doc_ref.set(firestore_data, merge=True)
+        except Exception as e:
+            print(f"Error saving to Firestore: {e}")
+
+def load_session_from_firestore(session_id: str) -> Optional[Dict]:
+    """Load session from Firestore"""
+    if db:
+        try:
+            doc_ref = db.collection('voice_interview_sessions').document(session_id)
+            doc = doc_ref.get()
+            if doc.exists:
+                return doc.to_dict()
+        except Exception as e:
+            print(f"Error loading from Firestore: {e}")
+    return None
+
+def get_session(session_id: str) -> Optional[Dict]:
+    """Get session from Firestore or memory"""
+    session = load_session_from_firestore(session_id)
+    if session:
+        return session
+    return sessions_memory.get(session_id)
+
+def update_session(session_id: str, updates: Dict):
+    """Update session in Firestore and memory"""
+    if session_id in sessions_memory:
+        sessions_memory[session_id].update(updates)
+    save_session_to_firestore(session_id, updates)
+
+# -------------------------
 # Helper Functions
 # -------------------------
-def evaluate_answer(question: str, answer: str, question_id: int) -> Dict:
-    """Evaluate candidate's answer using GPT with structured prompt."""
-    
-    evaluation_prompt = ChatPromptTemplate.from_template("""
-    You are an expert Excel interviewer evaluating a candidate's response. 
-    
-    Question ID: {question_id}
-    Question: {question}
-    Candidate Answer: {answer}
-    
-    Evaluate the candidate's answer based on:
-    1. Technical accuracy (0-5)
-    2. Practical application (0-5) 
-    3. Clarity of explanation (0-5)
-    4. Completeness (0-5)
-    
-    Provide constructive feedback and suggest improvements.
-    
-    Respond in this EXACT JSON format:
-    {{
-        "technical_accuracy": <int>,
-        "practical_application": <int>,
-        "clarity": <int>,
-        "completeness": <int>,
-        "overall_score": <float>,
-        "feedback": "<detailed feedback string>",
-        "strengths": ["<strength1>", "<strength2>"],
-        "improvements": ["<improvement1>", "<improvement2>"]
-    }}
-    """)
-    
+def transcribe_audio(file_path: str) -> str:
+    """Convert speech to text using Whisper API"""
     try:
-        chain = evaluation_prompt | llm
-        result = chain.invoke({
-            "question_id": question_id,
-            "question": question,
-            "answer": answer
-        })
-        
-        # Parse JSON response
-        evaluation = json.loads(result.content)
-        return evaluation
+        with open(file_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="en"
+            )
+        return transcript.text
     except Exception as e:
-        # Fallback evaluation if JSON parsing fails
-        return {
-            "technical_accuracy": 3,
-            "practical_application": 3,
-            "clarity": 3,
-            "completeness": 3,
-            "overall_score": 3.0,
-            "feedback": f"Evaluation completed with standard scoring. Error: {str(e)}",
-            "strengths": ["Answer provided"],
-            "improvements": ["Could be more detailed"]
-        }
+        raise HTTPException(status_code=500, detail=f"Speech transcription failed: {str(e)}")
 
-def generate_final_summary(answers: List[Dict], candidate_name: str) -> Dict:
-    """Generate comprehensive final performance report."""
-    
-    # Calculate overall statistics
-    total_score = sum(answer.get('evaluation', {}).get('overall_score', 0) for answer in answers)
-    average_score = total_score / len(answers) if answers else 0
-    
-    # Prepare detailed feedback for GPT
-    feedback_text = "\n\n".join([
-        f"Question {i+1}: {answer['question']}\n"
-        f"Answer: {answer['answer']}\n"
-        f"Score: {answer.get('evaluation', {}).get('overall_score', 0)}/5\n"
-        f"Feedback: {answer.get('evaluation', {}).get('feedback', 'No feedback')}"
-        for i, answer in enumerate(answers)
-    ])
-    
-    summary_prompt = ChatPromptTemplate.from_template("""
-    You are an Excel expert providing a final interview assessment for {candidate_name}.
-    
-    Interview Results:
-    {feedback_text}
-    
-    Average Score: {average_score}/5
-    
-    Provide a comprehensive assessment in this EXACT JSON format:
-    {{
-        "summary": "<overall performance summary>",
-        "strengths": ["<strength1>", "<strength2>", "<strength3>"],
-        "weaknesses": ["<weakness1>", "<weakness2>"],
-        "recommendation": "<Hire/Needs Improvement/Not Ready>",
-        "detailed_feedback": [
-            {{
-                "question_id": <int>,
-                "question": "<question>",
-                "score": <float>,
-                "feedback": "<specific feedback>"
-            }}
-        ]
-    }}
-    """)
-    
+def synthesize_speech(text: str, output_path: str):
+    """Convert text to speech using OpenAI TTS"""
     try:
-        chain = summary_prompt | llm
-        result = chain.invoke({
-            "candidate_name": candidate_name,
-            "feedback_text": feedback_text,
-            "average_score": average_score
-        })
-        
-        summary_data = json.loads(result.content)
-        summary_data["overall_score"] = average_score
-        return summary_data
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice="alloy",
+            input=text
+        )
+        response.stream_to_file(output_path)
     except Exception as e:
-        # Fallback summary
-        return {
-            "summary": f"Interview completed for {candidate_name}. Average score: {average_score:.1f}/5",
-            "strengths": ["Participated in interview"],
-            "weaknesses": ["Areas for improvement identified"],
-            "recommendation": "Needs Improvement" if average_score < 3 else "Hire",
-            "overall_score": average_score,
-            "detailed_feedback": [
-                {
-                    "question_id": answer.get('question_id', i),
-                    "question": answer.get('question', 'Question'),
-                    "score": answer.get('evaluation', {}).get('overall_score', 0),
-                    "feedback": answer.get('evaluation', {}).get('feedback', 'No feedback')
-                }
-                for i, answer in enumerate(answers)
-            ]
-        }
+        raise HTTPException(status_code=500, detail=f"Speech synthesis failed: {str(e)}")
+
+def generate_introduction() -> str:
+    """Generate AI introduction speech"""
+    return """Hello! I'm ExcelBot, your AI Excel interviewer today. 
+    I'll be conducting a voice-based interview to assess your Excel skills. 
+    I'll ask you five questions covering various Excel topics including formulas, data analysis, and spreadsheet management. 
+    After each question, please record your answer and click submit when you're done. 
+    At the end of all five questions, you'll receive comprehensive feedback on your performance. 
+    Let's begin with the first question."""
+
+def generate_question_speech(question_text: str, question_number: int) -> str:
+    """Generate speech for asking a question"""
+    return f"Question {question_number}. {question_text}"
 
 # -------------------------
 # API Endpoints
 # -------------------------
 @app.get("/")
 def root():
-    return {"message": "Excel Mock Interviewer API", "version": "1.0.0"}
+    return {
+        "message": "Excel Voice Interview API", 
+        "version": "3.0.0",
+        "features": ["voice_only_interview", "batch_evaluation", "firestore_persistence"]
+    }
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "sessions": len(sessions)}
+    return {
+        "status": "healthy", 
+        "sessions_memory": len(sessions_memory),
+        "firestore_enabled": db is not None,
+        "total_questions": len(QUESTIONS)
+    }
 
 @app.post("/interview/start", response_model=StartInterviewResponse)
-def start_interview(request: StartInterviewRequest):
-    """Start a new interview session."""
+async def start_interview(request: StartInterviewRequest):
+    """Start a new voice-only interview session"""
     session_id = str(uuid.uuid4())
     
-    # Initialize session
-    sessions[session_id] = {
+    # Create session data
+    session_data = {
+        "session_id": session_id,
         "candidate_name": request.candidate_name,
+        "started_at": datetime.utcnow().isoformat(),
+        "finished_at": None,
         "current_question": 0,
-        "answers": [],
-        "started_at": None,
-        "finished_at": None
+        "questions": [],
+        "evaluation": None,
+        "status": "in_progress"
     }
     
-    welcome_message = f"""
-    Welcome to the Excel Skills Assessment, {request.candidate_name}!
+    # Save to both memory and Firestore
+    sessions_memory[session_id] = session_data
+    save_session_to_firestore(session_id, session_data)
     
-    This interview consists of {len(QUESTIONS)} questions covering various Excel topics including:
-    - Lookup functions and formulas
-    - Data analysis and pivot tables
-    - Cell references and data management
-    - Charts and visualization
-    - Statistical functions
+    # Generate introduction audio
+    introduction_text = generate_introduction()
+    temp_dir = tempfile.mkdtemp()
+    intro_audio_path = os.path.join(temp_dir, f"intro_{session_id}.mp3")
+    synthesize_speech(introduction_text, intro_audio_path)
     
-    Please answer each question to the best of your ability. You'll receive immediate feedback after each response.
-    
-    Good luck!
-    """
+    # First question
+    first_question = QUESTIONS[0]
     
     return StartInterviewResponse(
         session_id=session_id,
-        welcome_message=welcome_message.strip(),
-        first_question=QUESTIONS[0]["question"],
+        introduction_audio_url=f"/audio/{session_id}/intro",
+        first_question={
+            "id": first_question["id"],
+            "question": first_question["question"],
+            "number": 1,
+            "audio_url": f"/audio/{session_id}/question/1"
+        },
         total_questions=len(QUESTIONS)
     )
 
-@app.post("/interview/answer", response_model=SubmitAnswerResponse)
-def submit_answer(request: SubmitAnswerRequest):
-    """Submit an answer and get evaluation."""
-    session = sessions.get(request.session_id)
+@app.get("/audio/{session_id}/intro")
+async def get_intro_audio(session_id: str):
+    """Get introduction audio"""
+    introduction_text = generate_introduction()
+    temp_dir = tempfile.mkdtemp()
+    audio_path = os.path.join(temp_dir, f"intro_{session_id}.mp3")
+    synthesize_speech(introduction_text, audio_path)
+    return FileResponse(audio_path, media_type="audio/mpeg", filename="introduction.mp3")
+
+@app.get("/audio/{session_id}/question/{question_number}")
+async def get_question_audio(session_id: str, question_number: int):
+    """Get question audio"""
+    if question_number < 1 or question_number > len(QUESTIONS):
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    question = QUESTIONS[question_number - 1]
+    question_speech = generate_question_speech(question["question"], question_number)
+    
+    temp_dir = tempfile.mkdtemp()
+    audio_path = os.path.join(temp_dir, f"question_{session_id}_{question_number}.mp3")
+    synthesize_speech(question_speech, audio_path)
+    
+    return FileResponse(audio_path, media_type="audio/mpeg", filename=f"question_{question_number}.mp3")
+
+@app.post("/interview/submit-answer", response_model=SubmitAnswerResponse)
+async def submit_answer(
+    session_id: str = Form(...),
+    question_id: int = Form(...),
+    audio: UploadFile = File(...)
+):
+    """Submit answer for a question (voice recording)"""
+    
+    # Get session
+    session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    current_idx = session["current_question"]
-    if current_idx >= len(QUESTIONS):
-        raise HTTPException(status_code=400, detail="Interview already completed")
+    if session["status"] != "in_progress":
+        raise HTTPException(status_code=400, detail="Interview is not in progress")
     
-    current_question = QUESTIONS[current_idx]
+    # Verify question ID
+    if question_id < 1 or question_id > len(QUESTIONS):
+        raise HTTPException(status_code=400, detail="Invalid question ID")
     
-    # Evaluate the answer
-    evaluation = evaluate_answer(
-        current_question["question"], 
-        request.answer, 
-        current_question["id"]
-    )
+    current_question_idx = session["current_question"]
+    if question_id != current_question_idx + 1:
+        raise HTTPException(status_code=400, detail="Question ID mismatch")
     
-    # Store the answer and evaluation
-    session["answers"].append({
-        "question_id": current_question["id"],
-        "question": current_question["question"],
-        "answer": request.answer,
-        "evaluation": evaluation,
-        "category": current_question["category"],
-        "difficulty": current_question["difficulty"]
-    })
+    # Save uploaded audio
+    temp_dir = tempfile.mkdtemp()
+    audio_path = os.path.join(temp_dir, f"answer_{session_id}_{question_id}.wav")
+    with open(audio_path, "wb") as f:
+        content = await audio.read()
+        f.write(content)
     
-    # Move to next question
+    # Transcribe audio
+    transcript = transcribe_audio(audio_path)
+    
+    # Get question details
+    question = QUESTIONS[current_question_idx]
+    
+    # Store Q&A pair
+    qa_pair = {
+        "question_id": question["id"],
+        "question_text": question["question"],
+        "category": question["category"],
+        "difficulty": question["difficulty"],
+        "answer_transcript": transcript,
+        "asked_at": session.get("started_at"),
+        "answered_at": datetime.utcnow().isoformat()
+    }
+    
+    # Update session
+    session["questions"].append(qa_pair)
     session["current_question"] += 1
+    
+    # Check if finished
     finished = session["current_question"] >= len(QUESTIONS)
+    if finished:
+        session["status"] = "awaiting_feedback"
+    
+    # Save session
+    sessions_memory[session_id] = session
+    save_session_to_firestore(session_id, session)
     
     # Prepare response
     next_question = None
     if not finished:
-        next_question = QUESTIONS[session["current_question"]]["question"]
+        next_q = QUESTIONS[session["current_question"]]
+        next_question = {
+            "id": next_q["id"],
+            "question": next_q["question"],
+            "number": session["current_question"] + 1,
+            "audio_url": f"/audio/{session_id}/question/{session['current_question'] + 1}"
+        }
     
-    progress = f"Question {current_idx + 1} of {len(QUESTIONS)}"
+    progress = f"Question {current_question_idx + 1} of {len(QUESTIONS)}"
     
     return SubmitAnswerResponse(
-        question_id=current_question["id"],
-        question=current_question["question"],
-        evaluation=evaluation,
         next_question=next_question,
         finished=finished,
         progress=progress
     )
 
-@app.post("/interview/finish", response_model=FinishInterviewResponse)
-def finish_interview(request: FinishInterviewRequest):
-    """Generate final interview report."""
-    session = sessions.get(request.session_id)
+@app.post("/interview/evaluate", response_model=EvaluationResponse)
+async def evaluate_interview(request: EvaluateRequest):
+    """Evaluate all answers in batch and provide comprehensive feedback"""
+    
+    # Get session
+    session = get_session(request.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    if not session["answers"]:
-        raise HTTPException(status_code=400, detail="No answers submitted")
+    if session["status"] != "awaiting_feedback":
+        raise HTTPException(status_code=400, detail="Interview not ready for evaluation")
     
-    # Generate comprehensive summary
-    summary_data = generate_final_summary(
-        session["answers"], 
-        session["candidate_name"]
-    )
+    if not session["questions"]:
+        raise HTTPException(status_code=400, detail="No answers to evaluate")
     
-    return FinishInterviewResponse(
-        summary=summary_data["summary"],
-        overall_score=summary_data["overall_score"],
-        strengths=summary_data["strengths"],
-        weaknesses=summary_data["weaknesses"],
-        recommendation=summary_data["recommendation"],
-        detailed_feedback=summary_data["detailed_feedback"]
-    )
+    # Prepare evaluation prompt
+    qa_text = "\n\n".join([
+        f"Question {i+1} ({q['category']} - {q['difficulty']}):\n"
+        f"Q: {q['question_text']}\n"
+        f"Candidate's Answer: {q['answer_transcript']}"
+        for i, q in enumerate(session["questions"])
+    ])
+    
+    evaluation_prompt = f"""You are an expert Excel interviewer evaluating a candidate's performance in a voice interview.
+
+Candidate Name: {session['candidate_name']}
+
+Below are the 5 questions asked and the candidate's spoken answers (transcribed from voice):
+
+{qa_text}
+
+Please provide a comprehensive evaluation:
+
+1. For each question, evaluate on:
+   - Technical accuracy (0-5)
+   - Practical application (0-5)
+   - Clarity of explanation (0-5)
+   - Completeness (0-5)
+   - Overall score for the question (0-5, average of above)
+   - Specific feedback
+
+2. Overall assessment:
+   - Key strengths (3-4 points)
+   - Areas for improvement (2-3 points)
+   - Overall score (average of all 5 questions, 0-5)
+   - Final recommendation (Strong Hire / Hire / Needs Improvement / Not Ready)
+
+Respond in this EXACT JSON format:
+{{
+    "detailed_feedback": [
+        {{
+            "question_id": 1,
+            "question": "<question text>",
+            "technical_accuracy": <int 0-5>,
+            "practical_application": <int 0-5>,
+            "clarity": <int 0-5>,
+            "completeness": <int 0-5>,
+            "score": <float 0-5>,
+            "feedback": "<specific feedback for this question>"
+        }},
+        // ... repeat for all 5 questions
+    ],
+    "summary": "<overall performance summary paragraph>",
+    "strengths": ["<strength1>", "<strength2>", "<strength3>"],
+    "weaknesses": ["<weakness1>", "<weakness2>"],
+    "overall_score": <float 0-5>,
+    "recommendation": "<Strong Hire|Hire|Needs Improvement|Not Ready>"
+}}
+"""
+    
+    try:
+        # Call OpenAI
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an expert Excel interviewer. Provide detailed, constructive evaluation."},
+                {"role": "user", "content": evaluation_prompt}
+            ],
+            temperature=0.3
+        )
+        
+        # Parse response
+        evaluation_json = json.loads(response.choices[0].message.content)
+        
+        # Update session with evaluation
+        session["evaluation"] = evaluation_json
+        session["status"] = "completed"
+        session["finished_at"] = datetime.utcnow().isoformat()
+        
+        # Save session
+        sessions_memory[request.session_id] = session
+        save_session_to_firestore(request.session_id, session)
+        
+        return EvaluationResponse(
+            summary=evaluation_json["summary"],
+            overall_score=evaluation_json["overall_score"],
+            strengths=evaluation_json["strengths"],
+            weaknesses=evaluation_json["weaknesses"],
+            recommendation=evaluation_json["recommendation"],
+            detailed_feedback=evaluation_json["detailed_feedback"]
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
 
 @app.get("/interview/{session_id}/status")
 def get_interview_status(session_id: str):
-    """Get current interview status."""
-    session = sessions.get(session_id)
+    """Get current interview status"""
+    session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
     return {
         "candidate_name": session["candidate_name"],
+        "status": session["status"],
         "current_question": session["current_question"],
         "total_questions": len(QUESTIONS),
-        "answers_submitted": len(session["answers"]),
-        "finished": session["current_question"] >= len(QUESTIONS)
+        "questions_answered": len(session["questions"]),
+        "started_at": session["started_at"],
+        "finished_at": session.get("finished_at")
     }
 
-@app.get("/questions")
-def get_questions():
-    """Get all interview questions (for reference)."""
-    return {"questions": QUESTIONS, "total": len(QUESTIONS)}
+@app.get("/interview/{session_id}/transcript")
+def get_interview_transcript(session_id: str):
+    """Get full interview transcript"""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    return {
+        "session_id": session_id,
+        "candidate_name": session["candidate_name"],
+        "status": session["status"],
+        "questions": session["questions"],
+        "evaluation": session.get("evaluation"),
+        "started_at": session["started_at"],
+        "finished_at": session.get("finished_at")
+    }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

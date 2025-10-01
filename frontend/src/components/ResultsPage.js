@@ -22,34 +22,36 @@ const ResultsPage = ({ interviewData }) => {
       return;
     }
 
-    const fetchResults = async () => {
-      try {
-        const response = await fetch('/interview/finish', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            session_id: interviewData.sessionId
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch results');
-        }
-
-        const data = await response.json();
-        setResults(data);
-      } catch (error) {
-        console.error('Error fetching results:', error);
-        alert('Failed to load results. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchResults();
   }, [interviewData, navigate]);
+
+  const fetchResults = async () => {
+    setIsLoading(true);
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/interview/evaluate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: interviewData.sessionId
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch results');
+      }
+
+      const data = await response.json();
+      setResults(data);
+    } catch (error) {
+      console.error('Error fetching results:', error);
+      alert('Failed to load results. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getScoreColor = (score) => {
     if (score >= 4) return 'score-excellent';
@@ -109,11 +111,12 @@ const ResultsPage = ({ interviewData }) => {
         <div className="card text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Generating Your Results
+            Evaluating Your Performance
           </h2>
           <p className="text-gray-600">
-            Please wait while we analyze your performance...
+            Our AI is analyzing your answers and generating detailed feedback...
           </p>
+          <p className="text-sm text-gray-500 mt-2">This may take 10-15 seconds</p>
         </div>
       </div>
     );
@@ -182,7 +185,7 @@ const ResultsPage = ({ interviewData }) => {
         <div className="card">
           <div className="flex items-center space-x-2 mb-4">
             <TrendingUp className="h-5 w-5 text-success-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Strengths</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Key Strengths</h3>
           </div>
           <ul className="space-y-2">
             {results.strengths.map((strength, index) => (
@@ -220,7 +223,7 @@ const ResultsPage = ({ interviewData }) => {
         
         <div className="space-y-6">
           {results.detailed_feedback.map((feedback, index) => (
-            <div key={index} className="border-l-4 border-primary-200 pl-4">
+            <div key={index} className="border-l-4 border-primary-200 pl-4 py-2">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-gray-900">
                   Question {feedback.question_id}
@@ -232,9 +235,30 @@ const ResultsPage = ({ interviewData }) => {
                   </span>
                 </div>
               </div>
-              <p className="text-sm text-gray-600 mb-2">
-                {feedback.question}
+              <p className="text-sm text-gray-600 mb-2 italic">
+                "{feedback.question}"
               </p>
+              
+              {/* Breakdown scores */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                <div className="text-xs">
+                  <span className="text-gray-500">Technical:</span>
+                  <span className="font-semibold ml-1">{feedback.technical_accuracy}/5</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-gray-500">Practical:</span>
+                  <span className="font-semibold ml-1">{feedback.practical_application}/5</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-gray-500">Clarity:</span>
+                  <span className="font-semibold ml-1">{feedback.clarity}/5</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-gray-500">Complete:</span>
+                  <span className="font-semibold ml-1">{feedback.completeness}/5</span>
+                </div>
+              </div>
+              
               <p className="text-sm text-gray-700">
                 {feedback.feedback}
               </p>
@@ -276,4 +300,3 @@ const ResultsPage = ({ interviewData }) => {
 };
 
 export default ResultsPage;
-

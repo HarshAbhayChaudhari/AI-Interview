@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-PROJECT_ID=${GCP_PROJECT_ID:-"your-gcp-project-id"}
+PROJECT_ID=${GCP_PROJECT_ID:-"ai-interview-a68d2"}
 REGION=${GCP_REGION:-"us-central1"}
 SERVICE_NAME="excel-interviewer-api"
 FRONTEND_BUCKET=${FRONTEND_BUCKET:-"excel-interviewer-frontend"}
@@ -40,7 +40,7 @@ gcloud run deploy $SERVICE_NAME \
     --allow-unauthenticated \
     --memory 1Gi \
     --cpu 1 \
-    --max-instances 10 \
+    --max-instances 3 \
     --set-env-vars OPENAI_API_KEY=$OPENAI_API_KEY
 
 # Get the service URL
@@ -58,6 +58,19 @@ cd frontend
 
 # Install dependencies
 npm install
+
+# Create .env file with production API URL
+echo "Creating .env file with production backend URL..."
+cat > .env << EOF
+REACT_APP_FIREBASE_API_KEY=AIzaSyABAv3Pv87BGaS0mjn6KKUAMQ0BrTR5O1E
+REACT_APP_FIREBASE_AUTH_DOMAIN=ai-interview-a68d2.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=ai-interview-a68d2
+REACT_APP_FIREBASE_STORAGE_BUCKET=ai-interview-a68d2.firebasestorage.app
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=446216158419
+REACT_APP_FIREBASE_APP_ID=1:446216158419:web:e4e1675434f48b00a56826
+REACT_APP_FIREBASE_MEASUREMENT_ID=G-6SWV9DKE1D
+REACT_APP_API_URL=https://excel-interviewer-api-446216158419.us-central1.run.app
+EOF
 
 # Build the React app
 npm run build

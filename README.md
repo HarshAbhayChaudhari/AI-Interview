@@ -1,15 +1,49 @@
-# AI-Powered Excel Mock Interviewer
+# 🎤 AI-Powered Excel Voice Interview
 
-A comprehensive AI-driven system for assessing Excel skills through conversational interviews, built with FastAPI, React, and OpenAI GPT-4.
+A streamlined voice-only interview system for assessing Excel skills, built with FastAPI, React, OpenAI Whisper (STT), OpenAI TTS, and GPT-4.
 
 ## 🎯 Project Overview
 
-This project addresses the challenge of efficiently screening candidates for Excel proficiency in Finance, Operations, and Data Analytics roles. The system provides:
+This project provides an efficient, natural way to screen candidates for Excel proficiency through **voice-only interviews**. The system:
 
-- **Conversational AI Agent**: Simulates a real Excel interview experience
-- **Intelligent Evaluation**: GPT-4 powered assessment with detailed feedback
-- **Comprehensive Reporting**: Performance analysis with strengths, weaknesses, and recommendations
-- **Scalable Architecture**: Deployed on GCP Cloud Run with Firebase Hosting
+- **🎤 Voice-Only Interview**: Completely voice-based - no typing required
+- **🔒 Enforced Microphone Access**: Mandatory mic permission before starting
+- **🤖 AI Voice Introduction**: Auto-plays on start, explains the process
+- **📊 5 Focused Questions**: Covering VLOOKUP, cell references, pivot tables, formulas, and data management
+- **🔊 AI Speaks Questions**: Text-to-speech for natural interview experience
+- **🎯 Manual Submission**: Record answer, click submit when ready
+- **💾 Firestore Persistence**: Each Q&A saved asynchronously
+- **⚡ Batch Evaluation**: Single API call evaluates all 5 answers
+- **📈 Comprehensive Feedback**: Detailed analysis with scores, strengths, weaknesses, and recommendations
+- **☁️ Scalable Architecture**: Deployed on GCP Cloud Run with Firebase Hosting
+
+## 🆕 Version 3.0 - Voice-Only Interview
+
+### Complete System Redesign
+- 🎤 **Voice-Only**: No text input - completely voice-based interview
+- 🔒 **Mandatory Microphone**: Permission enforced before starting
+- ❌ **Removed Traditional Mode**: Streamlined to single interview experience
+- ✅ **5 Questions**: Reduced from 7 for optimal interview time
+
+### Voice Features
+- 🔊 **AI Introduction**: Auto-plays voice introduction on start
+- 🗣️ **AI Speaks Questions**: All questions spoken by AI (TTS)
+- 🎙️ **Voice Recording**: Manual start/stop recording
+- ✅ **Submit Button**: Clear control over when answer is submitted
+- 💾 **Async Storage**: Each Q&A saved to Firestore immediately
+
+### Batch Evaluation
+- ⏳ **No Intermediate Feedback**: Clean flow without interruptions
+- 🎯 **Get Feedback Button**: Appears after all 5 questions
+- ⚡ **Single API Call**: All answers evaluated at once
+- 📊 **Comprehensive Results**: Detailed breakdown for each question
+
+### Technical Stack
+- 🎤 **OpenAI Whisper**: Speech-to-text transcription
+- 🔊 **OpenAI TTS-1**: Natural voice synthesis
+- 🧠 **GPT-4o-mini**: Intelligent batch evaluation
+- 💾 **Firestore**: Real-time database persistence
+- ☁️ **GCP Cloud Run**: Scalable backend deployment
 
 ## 🏗️ Architecture & Design
 
@@ -49,12 +83,17 @@ graph TD
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 18+
-- OpenAI API Key
+- Python 3.9+
+- Node.js 16+
+- OpenAI API Key (with access to Whisper & TTS APIs)
+- Firebase Project with Firestore enabled
 - GCP Account (for deployment)
 
-### Local Development
+### 5-Minute Quick Start (Conversational Mode)
+
+**For the fastest setup, see:** [`QUICKSTART_CONVERSATIONAL.md`](QUICKSTART_CONVERSATIONAL.md)
+
+### Local Development (Detailed)
 
 1. **Clone the repository**
    ```bash
@@ -67,10 +106,14 @@ graph TD
    cd backend
    pip install -r requirements.txt
    
-   # Set environment variables
-   export OPENAI_API_KEY="your-openai-api-key"
+   # Configure environment (edit config.env)
+   OPENAI_API_KEY="your-openai-api-key"
+   GOOGLE_APPLICATION_CREDENTIALS="../ai-interview-a68d2-firebase-adminsdk-fbsvc-eeb9bc2e79.json"
+   GCP_PROJECT_ID="ai-interview-a68d2"
    
    # Run the server
+   python main.py
+   # OR
    uvicorn main:app --reload
    ```
 
@@ -78,6 +121,11 @@ graph TD
    ```bash
    cd frontend
    npm install
+   
+   # Configure environment (edit config.env)
+   REACT_APP_API_URL=http://localhost:8000
+   
+   # Run the app
    npm start
    ```
 
@@ -85,9 +133,27 @@ graph TD
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
+   - Health Check: http://localhost:8000/health
 
 ### Testing the API
 
+**New Conversational Endpoints:**
+```bash
+# Start conversational interview
+curl -X POST "http://localhost:8000/chat" \
+     -H "Content-Type: application/json" \
+     -d '{"message": "Hello, I am ready to start the interview."}'
+
+# Continue conversation
+curl -X POST "http://localhost:8000/chat" \
+     -H "Content-Type: application/json" \
+     -d '{"session_id": "your-session-id", "message": "Your answer here"}'
+
+# Get full transcript
+curl "http://localhost:8000/chat/{session_id}/transcript"
+```
+
+**Legacy Traditional Endpoints (Still Supported):**
 ```bash
 # Start interview
 curl -X POST "http://localhost:8000/interview/start" \
@@ -233,14 +299,20 @@ QUESTIONS = [
 
 ## 📝 API Documentation
 
-### Endpoints
+### Conversational Endpoints (New)
+
+- `POST /chat` - Unified conversational endpoint (text-based)
+- `POST /chat/voice` - Voice-based conversation (audio in/out)
+- `GET /chat/{session_id}/transcript` - Get full interview transcript
+- `GET /health` - Health check with Firestore status
+
+### Traditional Endpoints (Legacy - Still Supported)
 
 - `POST /interview/start` - Start a new interview session
 - `POST /interview/answer` - Submit an answer and get evaluation
 - `POST /interview/finish` - Generate final performance report
 - `GET /interview/{session_id}/status` - Get interview status
 - `GET /questions` - Get all interview questions
-- `GET /health` - Health check endpoint
 
 ### Response Formats
 
@@ -346,14 +418,41 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - FastAPI and React communities for excellent documentation
 - LangChain for LLM integration framework
 
+## 📚 Documentation
+
+This project includes comprehensive documentation:
+
+- **[VOICE_ONLY_INTERVIEW_GUIDE.md](VOICE_ONLY_INTERVIEW_GUIDE.md)** - ⭐ Complete guide to voice-only interview system (v3.0)
+- **[VOICE_IMPLEMENTATION_SUMMARY.md](VOICE_IMPLEMENTATION_SUMMARY.md)** - ⭐ What was implemented and how it works
+- **[DESIGN_DOCUMENT.md](DESIGN_DOCUMENT.md)** - Detailed system design and technical decisions
+- **[DEPLOYMENT_INSTRUCTIONS.md](DEPLOYMENT_INSTRUCTIONS.md)** - Step-by-step deployment guide for GCP
+- **[BACKEND_DEPLOYMENT_GUIDE.md](BACKEND_DEPLOYMENT_GUIDE.md)** - Backend-specific deployment guide
+
 ## 📞 Support
 
-For questions or support, please contact:
-- Email: support@excel-interviewer.com
-- Documentation: [Link to detailed docs]
-- Issues: [GitHub Issues](https://github.com/your-repo/issues)
+For questions or support:
+- 📖 Check the comprehensive guides above
+- 🔍 Review `backend/main.py` for API details
+- 🐛 Check backend logs for debugging
+- 📊 Inspect Firestore console for session data
+- 🔧 Visit http://localhost:8000/docs for interactive API documentation
+
+## 🆚 Conversational vs Traditional Mode
+
+| Feature | Conversational | Traditional |
+|---------|----------------|-------------|
+| **Interview Style** | Natural dialogue | Structured Q&A |
+| **AI Personality** | Friendly interviewer | Evaluator |
+| **Feedback Format** | Conversational text | Numeric scores + text |
+| **Score Visibility** | Hidden until end | Shown after each question |
+| **Voice Support** | ✅ Yes | ❌ No |
+| **Memory** | Full conversation | Individual answers |
+| **Transcript** | Available via API | Not available |
+| **Use Case** | Realistic interview sim | Fast assessment |
 
 ---
 
 **Built with ❤️ for efficient Excel skills assessment**
+
+**Version 2.0** - Now with Conversational AI & Voice Support 🎤✨
 
