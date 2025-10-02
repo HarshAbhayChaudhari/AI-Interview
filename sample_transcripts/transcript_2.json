@@ -1,10 +1,9 @@
 {
-  "candidate_name": "Michael Chen",
-  "interview_date": "2024-01-15",
-  "session_id": "session_002",
+  "candidate_name": "Vaibhav",
+  "interview_date": "02/10/2025",
   "overall_score": 3.2,
   "recommendation": "Needs Improvement",
-  "summary": "Michael shows basic to intermediate Excel skills with some knowledge of common functions, but lacks depth in advanced features and best practices. With additional training, he could become proficient.",
+  "summary": "Vaibhav shows basic to intermediate Excel skills with some knowledge of common functions, but lacks depth in advanced features and best practices. With additional training, he could become proficient.",
   "questions_and_answers": [
     {
       "question_id": 1,
@@ -79,36 +78,6 @@
         "feedback": "Shows some understanding but lacks knowledge of appropriate functions. Needs to learn AVERAGEIF and related functions.",
         "strengths": ["Attempts to solve", "Recognizes limitations"],
         "improvements": ["Learn AVERAGEIF function", "Understand conditional averaging", "Practice with different scenarios"]
-      }
-    },
-    {
-      "question_id": 6,
-      "question": "How would you create a dynamic chart that updates automatically when new data is added?",
-      "answer": "I'm not sure about this. Maybe you can use a table and the chart will update? Or you might need to manually update the chart range when you add new data. I haven't worked much with dynamic charts before.",
-      "evaluation": {
-        "technical_accuracy": 2,
-        "practical_application": 2,
-        "clarity": 3,
-        "completeness": 1,
-        "overall_score": 2.0,
-        "feedback": "Limited knowledge of dynamic charts. Needs significant improvement in this area.",
-        "strengths": ["Honest about limitations"],
-        "improvements": ["Learn about Excel Tables", "Understand named ranges", "Practice with dynamic ranges", "Study OFFSET function"]
-      }
-    },
-    {
-      "question_id": 7,
-      "question": "Explain the difference between COUNT, COUNTA, COUNTIF, and COUNTIFS functions with examples.",
-      "answer": "COUNT counts numbers, COUNTA counts all cells that aren't empty, COUNTIF counts cells that meet a condition, and COUNTIFS counts cells that meet multiple conditions. For examples: =COUNT(A1:A10) counts numbers, =COUNTA(A1:A10) counts non-empty cells, =COUNTIF(A1:A10,\">5\") counts cells greater than 5. I'm not sure about COUNTIFS syntax.",
-      "evaluation": {
-        "technical_accuracy": 4,
-        "practical_application": 3,
-        "clarity": 4,
-        "completeness": 3,
-        "overall_score": 3.5,
-        "feedback": "Good understanding of basic counting functions but lacks knowledge of COUNTIFS. Examples are helpful but could be more comprehensive.",
-        "strengths": ["Correct basic concepts", "Good examples for first three functions"],
-        "improvements": ["Learn COUNTIFS syntax", "Practice with multiple criteria", "More complex examples"]
       }
     }
   ],
