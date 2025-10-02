@@ -184,6 +184,7 @@ class EvaluateRequest(BaseModel):
 class EvaluationResponse(BaseModel):
     summary: str
     overall_score: float
+    overall_score_10: Optional[float] = None
     strengths: List[str]
     weaknesses: List[str]
     recommendation: str
@@ -434,13 +435,17 @@ async def submit_answer(
     
     # Get question details
     question = QUESTIONS[current_question_idx]
+    ai_question_tts_text = generate_question_speech(question["question"], question_id)
     
-    # Store Q&A pair
+    # Store Q&A pair (both transcripts)
     qa_pair = {
         "question_id": question["id"],
         "question_text": question["question"],
         "category": question["category"],
         "difficulty": question["difficulty"],
+        "ai_question_tts_text": ai_question_tts_text,
+        "candidate_transcript": transcript,
+        # Back-compat
         "answer_transcript": transcript,
         "asked_at": session.get("started_at"),
         "answered_at": datetime.utcnow().isoformat()
@@ -497,8 +502,9 @@ async def evaluate_interview(request: EvaluateRequest):
     # Prepare evaluation prompt
     qa_text = "\n\n".join([
         f"Question {i+1} ({q['category']} - {q['difficulty']}):\n"
-        f"Q: {q['question_text']}\n"
-        f"Candidate's Answer: {q['answer_transcript']}"
+        f"AI Asked (spoken): {q.get('ai_question_tts_text') or 'Question ' + str(i+1) + '. ' + q['question_text']}\n"
+        f"Question Text: {q['question_text']}\n"
+        f"Candidate Transcript: {q.get('candidate_transcript') or q.get('answer_transcript','')}"
         for i, q in enumerate(session["questions"])
     ])
     
@@ -510,7 +516,7 @@ Below are the 5 questions asked and the candidate's spoken answers (transcribed 
 
 {qa_text}
 
-Please provide a comprehensive evaluation:
+Please provide a comprehensive evaluation with 1-10 scoring (10 = outstanding, 5 = average, 1 = very weak):
 
 1. For each question, evaluate on:
    - Technical accuracy (0-5)
@@ -532,11 +538,11 @@ Respond in this EXACT JSON format:
         {{
             "question_id": 1,
             "question": "<question text>",
-            "technical_accuracy": <int 0-5>,
-            "practical_application": <int 0-5>,
-            "clarity": <int 0-5>,
-            "completeness": <int 0-5>,
-            "score": <float 0-5>,
+            "technical_accuracy": <int 1-10>,
+            "practical_application": <int 1-10>,
+            "clarity": <int 1-10>,
+            "completeness": <int 1-10>,
+            "score_10": <int 1-10>,
             "feedback": "<specific feedback for this question>"
         }},
         // ... repeat for all 5 questions
@@ -544,7 +550,7 @@ Respond in this EXACT JSON format:
     "summary": "<overall performance summary paragraph>",
     "strengths": ["<strength1>", "<strength2>", "<strength3>"],
     "weaknesses": ["<weakness1>", "<weakness2>"],
-    "overall_score": <float 0-5>,
+    "overall_score_10": <int 1-10>,
     "recommendation": "<Strong Hire|Hire|Needs Improvement|Not Ready>"
 }}
 """
@@ -553,22 +559,58 @@ Respond in this EXACT JSON format:
         # Call Gemini 2.0 Flash via REST
         parts = [{"text": evaluation_prompt}]
         data = gemini_generate_content(parts, GEMINI_TEXT_MODEL, generation_config={"temperature": 0.3})
+        
         # Extract model text
         candidates = data.get("candidates", [])
         if not candidates:
-            raise RuntimeError("No candidates in evaluation response")
+            raise RuntimeError(f"No candidates in evaluation response")
+        
         parts_out = candidates[0].get("content", {}).get("parts", [])
         text_out = None
         for p in parts_out:
             if "text" in p:
                 text_out = p["text"]
                 break
-        if not text_out:
-            raise RuntimeError("No text found in evaluation response")
-        evaluation_json = json.loads(text_out)
         
+        if not text_out:
+            raise RuntimeError(f"No text found in evaluation response")
+        
+        # Clean up text_out if it contains markdown code blocks
+        if "```json" in text_out:
+            text_out = text_out.split("```json")[1].split("```")[0].strip()
+        elif "```" in text_out:
+            text_out = text_out.split("```")[1].split("```")[0].strip()
+        
+        evaluation_json = json.loads(text_out)
+
+        # Compute and back-fill 0-5 scores from 1-10
+        overall_10 = evaluation_json.get("overall_score_10")
+        if overall_10 is None and "overall_score" in evaluation_json:
+            # if model emits overall_score as 1-10 (older draft), capture and convert
+            try:
+                overall_10 = float(evaluation_json["overall_score"])  # type: ignore
+            except Exception:
+                overall_10 = None
+        # Per-question mapping
+        for df in evaluation_json.get("detailed_feedback", []):
+            if "score_10" in df and "score" not in df:
+                try:
+                    df["score"] = round(float(df["score_10"]) / 2, 2)
+                except Exception:
+                    pass
+        # Compute overall if absent
+        if overall_10 is None:
+            scores10 = [df.get("score_10") for df in evaluation_json.get("detailed_feedback", []) if isinstance(df.get("score_10"), (int, float))]
+            if scores10:
+                overall_10 = sum(scores10) / len(scores10)
+        overall_5 = round(overall_10 / 2, 2) if isinstance(overall_10, (int, float)) else evaluation_json.get("overall_score", 0.0)
+
         # Update session with evaluation
-        session["evaluation"] = evaluation_json
+        session["evaluation"] = {
+            **evaluation_json,
+            "overall_score_10": overall_10,
+            "overall_score": overall_5,
+        }
         session["status"] = "completed"
         session["finished_at"] = datetime.utcnow().isoformat()
         
@@ -579,7 +621,8 @@ Respond in this EXACT JSON format:
         
         return EvaluationResponse(
             summary=evaluation_json["summary"],
-            overall_score=evaluation_json["overall_score"],
+            overall_score=overall_5 if isinstance(overall_5, (int, float)) else 0.0,
+            overall_score_10=overall_10 if isinstance(overall_10, (int, float)) else None,
             strengths=evaluation_json["strengths"],
             weaknesses=evaluation_json["weaknesses"],
             recommendation=evaluation_json["recommendation"],
